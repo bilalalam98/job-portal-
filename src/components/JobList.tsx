@@ -1,74 +1,81 @@
-'use client';
-import { useEffect, useState } from 'react';
-import socket from '../lib/socket';
-import { API_URL } from '@/services/job.service';
+"use client";
+import socket from "@/lib/socket";
+import { API_URL } from "@/services/job.service";
+import { useEffect, useState } from "react";
+import JobItem from "./JobItem";
+import Table from "./Table";
 
 const JobList = () => {
   const [jobs, setJobs] = useState<any[]>([]);
-  const [jobStatus, setJobStatus] = useState<string>('idle');
-  const [imageUrl, setImageUrl] = useState<string>('');
-  const [jobId, setJobId] = useState<string>('');
+  const [jobStatus, setJobStatus] = useState<string>("idle");
+  const [imageUrl, setImageUrl] = useState<string>("");
+  const [jobId, setJobId] = useState<string>("");
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    socket.on('jobStatusUpdate', (data) => {
-      setJobStatus(data.status);
+    const fetchJobs = async () => {
+      setLoading(prev=>!prev);
+      const response = await fetch(API_URL);
+      const data = await response.json();
+      setJobs(data);
+      setLoading(prev=>!prev);
+    };
+    fetchJobs();
+  }, []);
 
-      console.log("yeh hai  data", data);
-      if (data.status === 'pending') {
-        console.log("yeh hai pending wali data", data);
-        setImageUrl(data.data.imageUrl);
+  useEffect(() => {
+    socket.on("jobStatusUpdate", (data: any) => {
+      if (data.status === "pending") {
         setJobId(data.data.jobId);
-      } else if (data.status === 'success') {
+        setImageUrl(data.data.imageUrl);
+        setJobStatus("pending");
+      } else if (data.status === "resolved") {
+        setJobStatus("resolved");
+        setImageUrl(data.data.imageUrl);
         setJobs((prevJobs) => {
-          const existingJobIndex = prevJobs.findIndex(j => j.jobId === data.jobId);
+          const existingJobIndex = prevJobs.findIndex(
+            (job) => job.jobId === data.data.jobId
+          );
           if (existingJobIndex > -1) {
             const updatedJobs = [...prevJobs];
-            updatedJobs[existingJobIndex] = data;
+            updatedJobs[existingJobIndex] = data.data;
             return updatedJobs;
           }
-          return [...prevJobs, data];
+          return [...prevJobs, data.data];
         });
       }
     });
 
     return () => {
-      socket.off('jobStatusUpdate');
+      socket.off("jobStatusUpdate");
     };
   }, []);
 
   const createJob = async () => {
+    setLoading(prev=>!prev);
     const response = await fetch(API_URL, {
-      method: 'POST',
-      headers: { 'x-client-id': socket.id } as any,
+      method: "POST",
+      headers: { "x-client-id": socket.id } as any,
     });
     const data = await response.json();
     setJobId(data.jobId);
+    setLoading(prev=>!prev);
   };
+  const currentJob = {jobId,status: jobStatus,imageUrl}
 
   return (
-    <div>
-      <button onClick={createJob} className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
-       Create Job
-      </button>
-      {jobStatus === 'pending' && (
-        <>
-        <p>Job Status: {jobStatus}</p>
-        <img src={imageUrl} alt="Random food" />
-        </>
-      )}
-      {jobStatus === 'success' && (
-        <>
-         <p>Job Status: {jobStatus}</p>
-        <p>Newly created Job ID: {jobId}</p>
-        <ul>
-        {jobs.map((job) => (
-          <li key={job.jobId}>
-            Job ID: {job.jobId}
-          </li>
-        ))}
-      </ul>
-        </>
-      )}
+    <div className="p-4 bg-gray-100 min-h-screen">
+       <JobItem job={currentJob} loading={loading}/>
+      <div className="mb-4 flex justify-center">
+        <button
+          onClick={createJob}
+          disabled={loading}
+          className={`bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded ${loading && '!bg-gray-500 hover:!bg-gray-700'}`}
+        >
+          Create Job
+        </button>
+      </div>
+      <Table jobs={jobs} loading={loading}/>
     </div>
   );
 };
